@@ -14,6 +14,9 @@ const { GRAPHICS, prepareImagePayload } = require('./mediaEngine'); // Import Me
 
 const connections = new Map();
 
+const activeExams = new Map(); // Tracks ongoing trivia questions for players
+
+
 const BRAND = {
     dev: "Devtrust",
     ownerJid: "2347041560392@s.whatsapp.net",
@@ -211,6 +214,101 @@ async function startBot(phoneNumber, socket) {
 
                 return await conn.sendMessage(from, { text: trainingResultText });
             }
+
+
+                        // Place this inside your conn.ev.on('messages.upsert') command handler logic in src/bot.js
+
+            // TRIVIA ANSWER CHECKER INJECTOR (Runs before normal command evaluation)
+            if (activeExams.has(from)) {
+                const examData = activeExams.get(from);
+                const playerAnswer = cleanText.toLowerCase();
+
+                // Clear the active exam tracking immediately so they can't double-guess
+                activeExams.delete(from);
+
+                if (playerAnswer === examData.correctAnswer) {
+                    // Update user rank and give a massive reward
+                    user.rank = examData.nextRank;
+                    user.ryo += examData.rewardRyo;
+                    user.chakra.max += 30;
+                    user.hp.max += 100;
+                    user.chakra.current = user.chakra.max;
+                    user.hp.current = user.hp.max;
+                    await user.save();
+
+                    const passMsg = `🎉 *PROMOTION EXAM PASSED!* 🎉\n\n` +
+                        `✨ *Examiner:* Excellent answer, Ninja! Your knowledge and resolve match your skills.\n\n` +
+                        `🎖️ *New Official Rank:* **${user.rank}**\n` +
+                        `💰 Promotion Bonus:* +💰 ${examData.rewardRyo} Ryo\n` +
+                        `💪 Permanent Stats Boost:* +30 Max Chakra | +100 Max HP (Fully Restored!)\n\n` +
+                        `_Your name has been updated in the village archives. Go forth and claim higher bounties!_`;
+                    return await conn.sendMessage(from, { text: passMsg });
+                } else {
+                    const failMsg = `❌ *EXAM FAILURE* ❌\n\n` +
+                        `💥 *Examiner:* Incorrect! A shinobi must be sharp in both mind and body. You failed the trial.\n\n` +
+                        `📝 *Correct Answer was:* **${examData.correctAnswer.toUpperCase()}**\n\n` +
+                        `💪 _Train harder, level up your stats, and try again when you are ready!_`;
+                    return await conn.sendMessage(from, { text: failMsg });
+                }
+            }
+
+            // COMMAND: !exam
+            if (lowerText === '!exam') {
+                let requiredLevel = 0;
+                let nextRank = "";
+                let rewardRyo = 0;
+
+                // Determine eligibility based on current rank
+                if (user.rank === "Academy Student") {
+                    requiredLevel = 5;
+                    nextRank = "Genin";
+                    rewardRyo = 1000;
+                } else if (user.rank === "Genin") {
+                    requiredLevel = 15;
+                    nextRank = "Chunin";
+                    rewardRyo = 3500;
+                } else if (user.rank === "Chunin") {
+                    requiredLevel = 30;
+                    nextRank = "Jonin";
+                    rewardRyo = 8000;
+                } else if (user.rank === "Jonin") {
+                    return await conn.sendMessage(from, { text: `⚡ *ELITE JONIN STATUS* ⚡\n\nYou have reached the highest exam tier! Your next path is the world tournament to fight for the absolute title of **Hokage**!` });
+                }
+
+                // Check Level Requirement Guard
+                if (user.level < requiredLevel) {
+                    return await conn.sendMessage(from, { text: `🔒 *EXAM ELIGIBILITY LOCKED* 🔒\n\nYou are currently an *${user.rank}* (Lv. ${user.level}).\n\nTo challenge the official **${nextRank} Promotional Exam**, you must train until you reach **Level ${requiredLevel}**!` });
+                }
+
+                // Questions Matrix Pool
+                const triviaPool = [
+                    { q: "Who was the Fourth Hokage of the Hidden Leaf Village?\na) Tobirama\nb) Minato\nc) Hiruzen\nd) Tsunade", a: "b" },
+                    { q: "What is the name of the tailed beast sealed inside Gaara?\na) Shukaku\nb) Matatabi\nc) Kurama\nb) Gyuki", a: "a" },
+                    { q: "Which clan does the Kekkei Genkai 'Byakugan' belong to?\na) Uchiha\nb) Uzumaki\nc) Hyuga\nd) Kaguya", a: "c" },
+                    { q: "What is the name of Sasuke Uchiha's signature lightning jutsu?\na) Rasengan\nb) Chidori\nc) Amaterasu\nd) Kirin", a: "b" },
+                    { q: "Who is known as the 'Handsome Devil of the Leaf'?\na) Naruto\nb) Kakashi\nc) Rock Lee\nd) Neji", a: "c" }
+                ];
+
+                // Pick a random question
+                const selectedTrivia = triviaPool[Math.floor(Math.random() * triviaPool.length)];
+
+                // Save question parameters to session state tracking map
+                activeExams.set(from, {
+                    nextRank: nextRank,
+                    correctAnswer: selectedTrivia.a,
+                    rewardRyo: rewardRyo
+                });
+
+                const examIntro = `🎖️ *OFFICIAL ${nextRank.toUpperCase()} PROMOTION EXAM* 🎖️\n` +
+                    `----------------------------------------\n` +
+                    `You are standing before the Village Council Board. To prove you are worthy of advancing to **${nextRank}**, you must answer this tactical lore question correctly.\n\n` +
+                    `⚠️ *RULES:* Reply directly to this message with just the letter of your choice (*a*, *b*, *c*, or *d*).\n` +
+                    `----------------------------------------\n\n` +
+                    `❓ *QUESTION:* ${selectedTrivia.q}`;
+
+                return await conn.sendMessage(from, { text: examIntro });
+            }
+            
 
 
                         // Place this inside your conn.ev.on('messages.upsert') command handler logic in src/bot.js
