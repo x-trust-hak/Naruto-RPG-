@@ -559,7 +559,7 @@ async function startBot(phoneNumber, socket = null) {
     return conn;
 }
 
-async function restoreAllSessions() {
+/*async function restoreAllSessions() {
     console.log("🔍 [STARTUP] Running automated active credentials audit...");
     try {
         if (!mongoose.connection.models['AuthSession']) return;
@@ -582,4 +582,42 @@ async function restoreAllSessions() {
     }
 }
 
+module.exports = { startBot, restoreAllSessions, connections };*/
+async function restoreAllSessions() {
+    console.log("🔍 [STARTUP] Running automated active credentials audit...");
+    try {
+        const AuthModel = mongoose.connection.models['AuthSession'];
+        if (!AuthModel) {
+            console.log("⚠️ [STARTUP ERROR] 'AuthSession' model does not exist in Mongoose. Awaiting new manual connections.");
+            return;
+        }
+        
+        // Log the raw database state for absolute visibility
+        const rawCount = await AuthModel.countDocuments({});
+        console.log(`📊 [DATABASE DIAGNOSTIC] Total raw records in AuthSession collection: ${rawCount}`);
+
+        const activeSessions = await AuthModel.find({}, { sessionId: 1, id: 1 });
+        
+        // Extract IDs defensively, accounting for both 'sessionId' and 'id' naming schemas
+        const extractedIds = activeSessions.map(s => s.sessionId || s.id).filter(id => id !== undefined && id !== null);
+        const cleanIds = [...new Set(extractedIds)];
+
+        if (cleanIds.length === 0) {
+            console.log("ℹ️ [STARTUP] 0 active player sessions found in DB. Memory pipeline cleared. Awaiting new pairings.");
+            // Reset global tracking map to prevent memory leak counters
+            connections.clear(); 
+            return;
+        }
+
+        console.log(`🌀 [STARTUP] Found ${cleanIds.length} valid active session records! Re-initializing core processes...`);
+        for (const phoneId of cleanIds) {
+            console.log(`🔄 [RECOVERY] Restoring active execution threads for ID: ${phoneId}`);
+            await startBot(phoneId, null);
+        }
+    } catch (err) {
+        console.error("❌ CRITICAL RECOVERY MATRIX CRASH:", err);
+    }
+}
+
 module.exports = { startBot, restoreAllSessions, connections };
+        
