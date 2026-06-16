@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: naruto-rpg-service
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.0.0
+      - key: MONGO_URI
+        value: mongodb+srv://your_username:your_password@cluster.mongodb.net/narutoGame?retryWrites=true&w=majority
+      - key: SELF_URL
+        value: https://your-naruto-rpg-app.onrender.com
+        
