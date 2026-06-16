@@ -9,7 +9,7 @@ services:
       - key: NODE_VERSION
         value: 20.0.0
       - key: MONGO_URI
-        value: mongodb+srv://your_username:your_password@cluster.mongodb.net/narutoGame?retryWrites=true&w=majority
+        value: mongodb+srv://narutoadmin:NarutoRPG2026Konoha@cluster0.u9ymx75.mongodb.net/narutoGame?retryWrites=true&w=majority&appName=Cluster0
       - key: SELF_URL
         value: https://your-naruto-rpg-app.onrender.com
         
