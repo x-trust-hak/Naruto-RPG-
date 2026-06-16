@@ -6,6 +6,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const mongoose = require('mongoose');
 const { startBot, connections } = require('./bot');
+const User = require('../models/User'); // Import the model to execute updates
 
 const app = express();
 const server = http.createServer(app);
@@ -14,11 +15,49 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Connect Mongo Engine Directly Before Opening Interface Ports
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/narutorpg')
-.then(() => console.log("🍃 MongoDB Cluster Pipeline Synchronized Successfully."))
+.then(() => {
+    console.log("🍃 MongoDB Cluster Pipeline Synchronized Successfully.");
+    startPassiveRegenLoop(); // Start the background passive regeneration loop!
+})
 .catch(err => console.error("Cluster synchronization fault caught:", err));
 
-// Tracking Server Start Time for the Frontend Uptime Counter
+// Global Background Passive Regeneration Engine (Ticking Clock)
+function startPassiveRegenLoop() {
+    console.log("⏱️ Shinobi Passive Chakra & HP Regeneration Engine Active.");
+    
+    setInterval(async () => {
+        try {
+            // Find all active players who need chakra or health recovery
+            const players = await User.find({ registrationStep: 'COMPLETED' });
+            
+            for (let player of players) {
+                let updated = false;
+
+                // Passive Chakra Regen: +10 every minute up to max
+                if (player.chakra.current < player.chakra.max) {
+                    player.chakra.current = Math.min(player.chakra.max, player.chakra.current + 10);
+                    updated = true;
+                }
+
+                // Passive HP Regen: +25 every minute up to max
+                if (player.hp.current < player.hp.max) {
+                    player.hp.current = Math.min(player.hp.max, player.hp.current + 25);
+                    updated = true;
+                }
+
+                if (updated) {
+                    await player.save();
+                }
+            }
+        } catch (err) {
+            console.error("Error running passive recovery tick:", err);
+        }
+    }, 60000); // Triggers globally every 60 seconds (1 minute)
+}
+
+// Tracking Server Start Time for Frontend Uptime Counter
 const startTime = Math.floor(Date.now() / 1000);
 
 io.on('connection', (socket) => {
@@ -68,3 +107,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 Server operating cleanly along target port route ${PORT}`);
 });
+                
