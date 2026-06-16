@@ -48,13 +48,7 @@ function rollClan() {
     return CLANS[Math.random() > 0.5 ? 0 : 1];
 }
 
-// =============================================================================
-//  MAIN BOT LAUNCHER  (mirrors the proven Lady Liya bot pattern)
-// =============================================================================
 async function startBot(phoneNumber, socket = null) {
-
-    // ── Tear down any existing socket before making a new one ─────────────────
-    // Prevents duplicate listener loops on Render restarts
     const existingConn = connections.get(phoneNumber);
     if (existingConn) {
         console.log(`♻️ Closing existing socket for ${phoneNumber}`);
@@ -71,7 +65,7 @@ async function startBot(phoneNumber, socket = null) {
         auth: state,
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
-        browser: Browsers.ubuntu('Chrome'),  // same browser as working bot
+        browser: Browsers.ubuntu('Chrome'),
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
     });
@@ -79,13 +73,11 @@ async function startBot(phoneNumber, socket = null) {
     connections.set(phoneNumber, conn);
     console.log(`✅ Socket created for ${phoneNumber}`);
 
-    // ── Pairing code: only for new/unregistered sessions ──────────────────────
     const isNewPairing = !conn.authState.creds.registered;
 
     if (isNewPairing && phoneNumber && socket) {
         const PAIR_TIMEOUT_MS = 60000;
 
-        // 3s delay — lets Noise handshake complete (same as working bot)
         setTimeout(async () => {
             try {
                 let code = await conn.requestPairingCode(phoneNumber);
@@ -98,7 +90,6 @@ async function startBot(phoneNumber, socket = null) {
             }
         }, 3000);
 
-        // Clean up if nobody pairs within timeout
         setTimeout(() => {
             if (!conn.authState.creds.registered && connections.get(phoneNumber) === conn) {
                 console.log(`⏱️ Pair timeout for ${phoneNumber}`);
@@ -109,7 +100,6 @@ async function startBot(phoneNumber, socket = null) {
         }, PAIR_TIMEOUT_MS);
     }
 
-    // ── Connection lifecycle ───────────────────────────────────────────────────
     conn.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
 
@@ -152,28 +142,34 @@ async function startBot(phoneNumber, socket = null) {
         }
     });
 
-    // ── Creds: always save on update (no auth gate — same as working bot) ──────
     conn.ev.on('creds.update', saveCreds);
 
-    // =========================================================================
-    //  MESSAGES HANDLER
-    // =========================================================================
     conn.ev.on('messages.upsert', async (chatUpdate) => {
         try {
-            if (chatUpdate.type !== 'notify') return;
+            // ✅ FIX: Support both append and notify message hooks
+            if (chatUpdate.type !== 'notify' && chatUpdate.type !== 'append') return;
 
             const m = chatUpdate.messages[0];
-            if (!m.message || m.key.fromMe) return;
+            if (!m || m.key?.fromMe) return;
 
             const from = m.key.remoteJid;
 
+            // ✅ FIX: Aggressive unpack matrix prevents empty layout crashes
+            let msg = m.message;
+            if (!msg) return;
+
+            if (msg.ephemeralMessage?.message) msg = msg.ephemeralMessage.message;
+            if (msg.viewOnceMessage?.message) msg = msg.viewOnceMessage.message;
+            if (msg.viewOnceMessageV2?.message) msg = msg.viewOnceMessageV2.message;
+            if (msg.documentWithCaptionMessage?.message) msg = msg.documentWithCaptionMessage.message;
+
             const text =
-                m.message.conversation ||
-                m.message.extendedTextMessage?.text ||
-                m.message.imageMessage?.caption ||
-                m.message.videoMessage?.caption ||
-                m.message.buttonsResponseMessage?.selectedButtonId ||
-                m.message.templateButtonReplyMessage?.selectedId ||
+                msg.conversation ||
+                msg.extendedTextMessage?.text ||
+                msg.imageMessage?.caption ||
+                msg.videoMessage?.caption ||
+                msg.buttonsResponseMessage?.selectedButtonId ||
+                msg.templateButtonReplyMessage?.selectedId ||
                 '';
 
             const cleanText = text.trim();
@@ -468,9 +464,6 @@ async function startBot(phoneNumber, socket = null) {
     return conn;
 }
 
-// =============================================================================
-//  RESTORE ALL SAVED SESSIONS ON STARTUP
-// =============================================================================
 async function restoreAllSessions() {
     console.log('🔍 [STARTUP] Scanning MongoDB for saved sessions...');
     try {
