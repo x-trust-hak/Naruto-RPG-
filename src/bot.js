@@ -211,6 +211,132 @@ async function startBot(phoneNumber, socket) {
 
                 return await conn.sendMessage(from, { text: trainingResultText });
             }
+
+
+                        // Place this inside your conn.ev.on('messages.upsert') command handler logic in src/bot.js
+
+            // COMMAND: !missions
+            if (lowerText === '!missions') {
+                const boardMsg = `📜 *VILLAGE SHINOBI MISSION BOARD* 📜\n\n` +
+                    `Welcome, Ninja *${user.username}*. Select a contract suited to your rank. Higher-tier missions carry dangerous failure risks!\n\n` +
+                    `🟢 *[D-Rank]* — \`!mission d\`\n` +
+                    `├ 📋 *Task:* Chase Tora the runaway cat / Weed fields\n` +
+                    `├ ⚡ *Cost:* 20 Chakra | 📈 *Rewards:* 150-300 Ryo & 20 XP\n` +
+                    `└ 🛡️ *Safety:* 100% Success Rate\n\n` +
+                    `🔵 *[C-Rank]* — \`!mission c\`\n` +
+                    `├ 📋 *Task:* Escort a merchant caravan through Wave Country\n` +
+                    `├ ⚡ *Cost:* 40 Chakra | 📈 *Rewards:* 500-900 Ryo & 50 XP\n` +
+                    `└ ⚠️ *Safety:* Danger present. Fail risk scales lower as your Level increases.\n\n` +
+                    `🔴 *[B-Rank]* — \`!mission b\`\n` +
+                    `├ 📋 *Task:* Ambush rogue bandits / Infiltrate supply outposts\n` +
+                    `├ ⚡ *Cost:* 60 Chakra | 📈 *Rewards:* 1,200-2,500 Ryo & 120 XP\n` +
+                    `└ 🚨 *Risk:* Heavy Ambush chance. Failure inflicts heavy physical damage!\n\n` +
+                    `🔥 *[S-Rank]* — \`!mission s\`\n` +
+                    `├ 📋 *Task:* Hunt rogue Akatsuki members or defend the Village boundaries\n` +
+                    `├ ⚡ *Cost:* 90 Chakra | 📈 *Rewards:* 4,000-7,500 Ryo, 350 XP & 1-2 Gems\n` +
+                    `└ 💀 *Danger:* Extreme lethal risk. Only elite high-level ninjas will survive.\n\n` +
+                    `_To deploy, type your target command (e.g., \`!mission d\`)_`;
+
+                return await conn.sendMessage(from, { text: boardMsg });
+            }
+
+            // COMMAND: !mission [tier]
+            if (lowerText.startsWith('!mission ')) {
+                const tier = lowerText.split(' ')[1];
+                
+                // 1. Structure configuration matrix mapping for all active missions
+                const missionConfigs = {
+                    'd': { name: "D-Rank: Catch Tora the Cat", chakra: 20, minRyo: 150, maxRyo: 300, xp: 20, baseSuccess: 100, failDmg: 0 },
+                    'c': { name: "C-Rank: Escort Merchant Fleet", chakra: 40, minRyo: 500, maxRyo: 900, xp: 50, baseSuccess: 75, failDmg: 80 },
+                    'b': { name: "B-Rank: Neutralize Rogue Bandits", chakra: 60, minRyo: 1200, maxRyo: 2500, xp: 120, baseSuccess: 55, failDmg: 180 },
+                    's': { name: "S-Rank: Engage Akatsuki Infiltrators", chakra: 90, minRyo: 4000, maxRyo: 7500, xp: 350, baseSuccess: 30, failDmg: 350 }
+                };
+
+                const config = missionConfigs[tier];
+                if (!config) {
+                    return await conn.sendMessage(from, { text: "❌ Mission tier not recognized on the board. Choose \`d\`, \`c\`, \`b\`, or \`s\`." });
+                }
+
+                // 2. Health & Chakra pre-flight checks
+                if (user.hp.current <= 1) {
+                    return await conn.sendMessage(from, { text: `🏥 *INJURED STATUS* 🏥\n\nYou are physically incapacitated with only ${user.hp.current} HP remaining! Please buy a Health Potion from the \`!shop\` or wait for passive healing before going back out.` });
+                }
+
+                if (user.chakra.current < config.chakra) {
+                    return await conn.sendMessage(from, { text: `❌ *INSUFFICIENT CHAKRA* ❌\n\nYou need at least *${config.chakra} Chakra* to take on this mission, but you only have ${user.chakra.current}.\n\n💊 _Tip: Use a Food Pill or wait for natural recovery._` });
+                }
+
+                // Deduct Chakra immediately upon starting the deployment
+                user.chakra.current -= config.chakra;
+
+                // 3. Dynamic Success Rate Calculation (Player Level adds a +2% bonus per level)
+                const levelBonus = (user.level - 1) * 2;
+                const finalSuccessChance = Math.min(95, config.baseSuccess + levelBonus); 
+                const roll = Math.random() * 100;
+
+                // HANDLE FAILURE SCENARIO
+                if (roll > finalSuccessChance) {
+                    // Reduce user's health points, leaving them with at least 1 HP
+                    const actualDamage = Math.min(user.hp.current - 1, config.failDmg);
+                    user.hp.current -= actualDamage;
+                    await user.save();
+
+                    const failMsg = `🚨 *MISSION FAILURE / AMBUSH* 🚨\n\n` +
+                        `🔴 *Mission:* ${config.name}\n` +
+                        `💥 *Status:* Your squad was completely ambushed by rogue missing-nin!\n\n` +
+                        `📉 *Chakra Lost:* -${config.chakra}\n` +
+                        `💔 *Damage Sustained:* -${actualDamage} HP (Remaining: ${user.hp.current}/${user.hp.max})\n\n` +
+                        `👉 _Heal up or rest before planning your counter-strike!_`;
+                    return await conn.sendMessage(from, { text: failMsg });
+                }
+
+                // HANDLE SUCCESS SCENARIO
+                const ryoEarned = Math.floor(Math.random() * (config.maxRyo - config.minRyo + 1)) + config.minRyo;
+                let gemsEarned = 0;
+                
+                // S-Rank contracts have a chance to drop premium gems
+                if (tier === 's') {
+                    gemsEarned = Math.random() > 0.5 ? 2 : 1;
+                }
+
+                user.ryo += ryoEarned;
+                user.xp += config.xp;
+                if (gemsEarned > 0) user.gems += gemsEarned;
+
+                // Check for Level Up milestones
+                let leveledUp = false;
+                const xpNeeded = user.level * 100;
+                if (user.xp >= xpNeeded) {
+                    user.xp -= xpNeeded;
+                    user.level += 1;
+                    user.chakra.max += 15;
+                    user.hp.max += 50;
+                    user.chakra.current = user.chakra.max;
+                    user.hp.current = user.hp.max;
+                    leveledUp = true;
+                }
+
+                await user.save();
+
+                let successMsg = `✅ *MISSION SUCCESS SCROLL* ✅\n\n` +
+                    `🦅 *Mission:* ${config.name}\n` +
+                    `🏆 *Status:* Mission completed perfectly. Your deployment squad has returned safely to the village.\n\n` +
+                    `⚡ *Chakra Expended:* -${config.chakra} (Remaining: ${user.chakra.current}/${user.chakra.max})\n` +
+                    `💰 *Rewards Secured:* 💰 ${ryoEarned.toLocaleString()} Ryo & ✨ +${config.xp} XP\n`;
+
+                if (gemsEarned > 0) {
+                    successMsg += `💎 *Premium Bonus:* +${gemsEarned} Ninja Gems found!\n`;
+                }
+
+                if (leveledUp) {
+                    successMsg += `\n🎉 *LEVEL UP!* 🎉\n` +
+                        `Your renown spreads! You climbed to *Level ${user.level}*!\n` +
+                        `💪 Max Health is now ${user.hp.max} HP and Max Chakra is ${user.chakra.max}!`;
+                }
+
+                return await conn.sendMessage(from, { text: successMsg });
+                    }
+                    
             
 
             // COMMAND: !profile (Upgraded with Village Landscape Card)
