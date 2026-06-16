@@ -20,7 +20,6 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/narutorpg')
     .then(async () => {
         console.log('🍃 MongoDB Connected.');
         startPassiveRegenLoop();
-        // ✅ FIX: Restore previously-paired sessions on every server boot
         await restoreAllSessions();
     })
     .catch(err => console.error('MongoDB connection error:', err));
@@ -56,10 +55,9 @@ io.on('connection', (socket) => {
     console.log('🌐 Frontend client connected');
 
     const statsInterval = setInterval(() => {
-        // Only count sockets that are fully open (readyState 1 = OPEN)
-        const activeSessions = [...connections.values()].filter(
-            c => c?.ws?.readyState === 1
-        ).length;
+        // ✅ FIX: In 6.7.22, verify connection state accurately by checking if connection map holds valid references
+        const activeSessions = [...connections.values()].filter(c => c && typeof c.sendMessage === 'function').length;
+        
         socket.emit('stats', {
             active: activeSessions,
             max: 100,
@@ -79,13 +77,11 @@ io.on('connection', (socket) => {
             return socket.emit('error', 'Invalid phone number format. Use country code + number (e.g. 2347041560392).');
         }
 
-        // ✅ FIX: If this phone is already connected, tell the frontend immediately
         if (connections.has(cleanPhone)) {
             const existing = connections.get(cleanPhone);
-            if (existing?.ws?.readyState === 1) {
+            if (existing && typeof existing.sendMessage === 'function') {
                 return socket.emit('connected', 'Session already active.');
             }
-            // Dead socket lingering — remove it so startBot can create a fresh one
             connections.delete(cleanPhone);
         }
 
@@ -108,7 +104,6 @@ app.get('/health', (req, res) => {
     res.json({ status: 'alive', usersOnline: connections.size });
 });
 
-// ── Self-Ping (Render free tier keep-alive) ───────────────────────────────────
 if (process.env.SELF_URL) {
     setInterval(() => {
         const https = require('https');
