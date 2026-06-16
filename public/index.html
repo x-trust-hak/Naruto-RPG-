@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🍥 DEVTRUST SHINOBI NETWORK 🍥</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #0c0908;
+            color: #ff6a00;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-y: auto;
+            position: relative;
+            padding: 20px;
+        }
+
+        /* Ambient Chakra Field Background Effect */
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 0;
+            opacity: 0.35;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            background: rgba(15, 11, 9, 0.85);
+            border: 2px solid #ff6a00;
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 460px;
+            box-shadow: 0 0 40px rgba(255, 106, 0, 0.25), inset 0 0 20px rgba(255, 106, 0, 0.1);
+            text-align: center;
+            backdrop-filter: blur(12px);
+        }
+
+        .logo-container {
+            margin-bottom: 25px;
+        }
+
+        .logo {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: #ff6a00;
+            text-shadow: 0 0 25px rgba(255, 106, 0, 0.8);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        .sub-logo {
+            font-size: 0.9rem;
+            color: #fff;
+            letter-spacing: 5px;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+
+        .tagline {
+            font-size: 0.75rem;
+            color: #a4a4a4;
+            letter-spacing: 2px;
+            margin-bottom: 25px;
+            text-transform: uppercase;
+        }
+
+        /* LIVE LIVE SERVER STATS PANEL */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 25px;
+            background: rgba(22, 16, 13, 0.6);
+            border: 1px solid #2e211a;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: left;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: #8c766c;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 2px;
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stat-value.online {
+            color: #00ff9d;
+            text-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 100%;
+            padding: 15px 20px;
+            background: #16100d;
+            border: 1px solid #4a3225;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        input:focus {
+            border-color: #ff6a00;
+            box-shadow: 0 0 15px rgba(255, 106, 0, 0.3);
+            background: #1c1410;
+        }
+
+        input::placeholder {
+            color: #614639;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #ff6a00 0%, #e04f00 100%);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            letter-spacing: 2px;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 5px 15px rgba(255, 106, 0, 0.3);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 106, 0, 0.5);
+            background: linear-gradient(135deg, #ff7b1a 0%, #f55700 100%);
+        }
+
+        button:disabled {
+            background: #2e2521;
+            color: #574b45;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .code-box {
+            margin-top: 25px;
+            padding: 20px;
+            background: #140e0b;
+            border: 1px dashed #ff6a00;
+            border-radius: 10px;
+            display: none;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .code-label {
+            font-size: 0.8rem;
+            color: #a4a4a4;
+            letter-spacing: 3px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        .code {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: 6px;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+        }
+
+        .status {
+            margin-top: 20px;
+            font-size: 0.85rem;
+            min-height: 20px;
+            letter-spacing: 1px;
+            font-weight: 500;
+        }
+
+        .status.success { color: #00ff9d; text-shadow: 0 0 10px rgba(0,255,157,0.3); }
+        .status.error { color: #ff4545; text-shadow: 0 0 10px rgba(255,69,69,0.3); }
+        .status.info { color: #ffaa66; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="chakraCanvas"></canvas>
+
+    <div class="container">
+        <div class="logo-container">
+            <div class="logo">Naruto RPG</div>
+            <div class="sub-logo">DEVTRUST</div>
+        </div>
+        <div class="tagline">Channel Your Chakra. Claim Your Destiny.</div>
+
+        <div class="stats-grid">
+            <div class="stat-item">
+                <span class="stat-label">🔴 Server Status</span>
+                <span id="srvStatus" class="stat-value online">ONLINE</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">⚡ Active Sessions</span>
+                <span id="srvSlots" class="stat-value">0 / 100</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">⏳ Uptime</span>
+                <span id="srvUptime" class="stat-value">0s</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">🛡️ Engine Node</span>
+                <span class="stat-value" style="color: #ff6a00;">Devtrust v2</span>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <input type="text" id="phoneInput" placeholder="Enter phone with country code (eg: 234...)" />
+        </div>
+        <button id="connectBtn">IGNITE CHAKRA NETWORK</button>
+
+        <div class="code-box" id="codeBox">
+            <div class="code-label">📜 WHATSAPP PAIRING SCROLL</div>
+            <div class="code" id="codeDisplay">--------</div>
+        </div>
+
+        <div class="status info" id="status">Awaiting ninja credentials initialization...</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('chakraCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const particles = [];
+        for(let i = 0; i < 65; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                radius: Math.random() * 2.5 + 0.5,
+                speedX: (Math.random() - 0.5) * 0.8,
+                speedY: (Math.random() - 0.5) * 0.8,
+                color: ['#ff6a00', '#ffaa00', '#ffffff', '#ff4000'][Math.floor(Math.random() * 4)]
+            });
+        }
+
+        function drawBackground() {
+            ctx.fillStyle = '#0c0908';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            particles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+
+                p.x += p.speedX;
+                p.y += p.speedY;
+
+                if(p.x < 0 || p.x > canvas.width) p.speedX *= -1;
+                if(p.y < 0 || p.y > canvas.height) p.speedY *= -1;
+            });
+            requestAnimationFrame(drawBackground);
+        }
+        drawBackground();
+
+        const socket = io();
+        const connectBtn = document.getElementById('connectBtn');
+        const phoneInput = document.getElementById('phoneInput');
+        const codeBox = document.getElementById('codeBox');
+        const codeDisplay = document.getElementById('codeDisplay');
+        const status = document.getElementById('status');
+
+        // Elements for live metric displays
+        const srvStatus = document.getElementById('srvStatus');
+        const srvSlots = document.getElementById('srvSlots');
+        const srvUptime = document.getElementById('srvUptime');
+
+        // Helper function to format system time into readable chunks
+        function formatDuration(seconds) {
+            if (seconds < 60) return `${seconds}s`;
+            const mins = Math.floor(seconds / 60);
+            if (mins < 60) return `${mins}m`;
+            const hrs = Math.floor(mins / 60);
+            return `${hrs}h ${mins % 60}m`;
+        }
+
+        // Listen for real-time stats updates arriving from src/server.js
+        socket.on('stats', (data) => {
+            const maxSlots = data.max || 100;
+            srvSlots.textContent = `${data.active} / ${maxSlots}`;
+            srvUptime.textContent = formatDuration(data.uptime);
+            
+            if (data.maintenanceMode) {
+                srvStatus.textContent = "MAINTENANCE";
+                srvStatus.className = "stat-value";
+                srvStatus.style.color = "#ff4545";
+            } else {
+                srvStatus.textContent = "ONLINE";
+                srvStatus.className = "stat-value online";
+                srvStatus.style.color = "#00ff9d";
+            }
+        });
+
+        connectBtn.addEventListener('click', () => {
+            const phoneNumber = phoneInput.value.trim().replace('+', '');
+            if (!phoneNumber) {
+                status.className = 'status error';
+                status.textContent = '❌ Please specify your target ninja phone number line.';
+                return;
+            }
+            connectBtn.disabled = true;
+            status.className = 'status info';
+            status.textContent = '📜 Reaching out to Konoha Server Core...';
+            socket.emit('request-code', phoneNumber);
+        });
+
+        socket.on('pairing-code', (code) => {
+            codeBox.style.display = 'block';
+            codeDisplay.textContent = code;
+            status.className = 'status info';
+            status.textContent = '💬 Link active! Enter this key into WhatsApp Linked Devices.';
+        });
+
+        socket.on('connected', (msg) => {
+            status.className = 'status success';
+            status.textContent = '⚡ Success! Connection open and ready for action.';
+            codeBox.style.display = 'none';
+            connectBtn.disabled = false;
+            phoneInput.value = "";
+        });
+
+        socket.on('logged-out', () => {
+            status.className = 'status error';
+            status.textContent = '❌ Session closed down. Reload interface to sync again.';
+            connectBtn.disabled = false;
+        });
+
+        socket.on('error', (msg) => {
+            status.className = 'status error';
+            status.textContent = '❌ ' + msg;
+            connectBtn.disabled = false;
+        });
+    </script>
+</body>
+</html>
