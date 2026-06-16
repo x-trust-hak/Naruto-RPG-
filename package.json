@@ -1,0 +1,18 @@
+{
+  "name": "naruto-rpg-devtrust",
+  "version": "2.0.0",
+  "description": "Premium Naruto WhatsApp RPG Game Bot Infrastructure Built by Devtrust",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.5.0",
+    "@hapi/boom": "^10.0.1",
+    "express": "^4.19.2",
+    "mongoose": "^8.3.1",
+    "pino": "^8.20.0",
+    "socket.io": "^4.7.5",
+    "dotenv": "^16.4.5"
+  }
+}
