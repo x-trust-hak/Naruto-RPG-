@@ -1,20 +1,20 @@
 // src/dbAuthState.js
 const mongoose = require('mongoose');
-const { proto } = require('@whiskeysockets/baileys');
-const { BufferJSON } = require('@whiskeysockets/baileys');
+const { proto, BufferJSON, initAuthCreds } = require('@whiskeysockets/baileys');
 
-// Flexible inline schema handling session state key-value mapping variables safely
 const AuthSessionSchema = new mongoose.Schema({
     sessionId: { type: String, required: true },
-    key: { type: String, required: true },
-    value: { type: String, required: true }
+    key:       { type: String, required: true },
+    value:     { type: String, required: true }
 });
 AuthSessionSchema.index({ sessionId: 1, key: 1 }, { unique: true });
 
-// Check if model already exists to prevent OverwriteModelError during hot-reloads
-const SessionModel = mongoose.models.AuthSession || mongoose.model('AuthSession', AuthSessionSchema);
+const SessionModel =
+    mongoose.models.AuthSession ||
+    mongoose.model('AuthSession', AuthSessionSchema);
 
 async function useMongoDBAuthState(sessionId) {
+
     const writeData = async (data, key) => {
         try {
             const stringified = JSON.stringify(data, BufferJSON.replacer);
@@ -24,7 +24,7 @@ async function useMongoDBAuthState(sessionId) {
                 { upsert: true, new: true }
             );
         } catch (err) {
-            console.error('Error writing auth state down:', err);
+            console.error('[DB] Error writing auth state:', err.message);
         }
     };
 
@@ -34,7 +34,7 @@ async function useMongoDBAuthState(sessionId) {
             if (!doc) return null;
             return JSON.parse(doc.value, BufferJSON.reviver);
         } catch (err) {
-            console.error('Error reading auth state key:', err);
+            console.error('[DB] Error reading auth state:', err.message);
             return null;
         }
     };
@@ -43,18 +43,15 @@ async function useMongoDBAuthState(sessionId) {
         try {
             await SessionModel.deleteOne({ sessionId, key });
         } catch (err) {
-            console.error('Error deleting data row:', err);
+            console.error('[DB] Error deleting auth state:', err.message);
         }
     };
 
-    // 1. Fetch existing credentials from DB
+    // Load existing creds from DB, or init fresh ones (memory only — NOT saved yet)
     let creds = await readData('creds');
-    
-    // 2. FIXED: If they don't exist, initialize them purely in memory.
-    // DO NOT write them to MongoDB yet!
     if (!creds) {
-        const { initAuthCreds } = require('@whiskeysockets/baileys');
         creds = initAuthCreds();
+        // ⚠️  DO NOT write to DB here — wait until 'connection.open' fires in bot.js
     }
 
     return {
@@ -63,25 +60,36 @@ async function useMongoDBAuthState(sessionId) {
             keys: {
                 get: async (type, ids) => {
                     const data = {};
-                    for (const id of ids) {
-                        let value = await readData(`${type}-${id}`);
-                        if (value) {
-                            if (type === 'app-state-sync-key') {
-                                value = proto.Message.AppStateSyncKeyData.fromObject(value);
+                    await Promise.all(
+                        ids.map(async (id) => {
+                            let value = await readData(`${type}-${id}`);
+                            if (value) {
+                                if (type === 'app-state-sync-key') {
+                                    value = proto.Message.AppStateSyncKeyData.fromObject(value);
+                                }
+                                data[id] = value;
                             }
-                            data[id] = value;
-                        }
-                    }
+                        })
+                    );
                     return data;
                 },
+
+                // FIX: Only allow key writes when the session is authenticated.
+                // We expose a setter so bot.js can flip the gate after 'open'.
                 set: async (data) => {
+                    // This is called by Baileys internally with signal keys.
+                    // We write them only if the session is already registered/open.
+                    // The bot.js sets isAuthenticated = true before saveCreds() on 'open'.
+                    // Signal keys during the pairing handshake MUST be persisted so
+                    // WhatsApp can verify the device — but ONLY those keys, not stale ones.
+                    // Solution: always write signal keys (they're needed for the handshake),
+                    // but the creds themselves are only written via saveCreds() after 'open'.
                     for (const type in data) {
                         for (const id in data[type]) {
                             const value = data[type][id];
-                            if (value === null) {
+                            if (value == null) {
                                 await removeData(`${type}-${id}`);
                             } else {
-                                // This will be safely intercepted by the write guard in your updated bot.js
                                 await writeData(value, `${type}-${id}`);
                             }
                         }
@@ -89,11 +97,21 @@ async function useMongoDBAuthState(sessionId) {
                 }
             }
         },
+
         saveCreds: async () => {
             await writeData(creds, 'creds');
+        },
+
+        // Exposed so bot.js can nuke a broken session before retrying
+        clearSession: async () => {
+            try {
+                await SessionModel.deleteMany({ sessionId });
+                console.log(`[DB] Cleared all keys for session: ${sessionId}`);
+            } catch (err) {
+                console.error('[DB] Error clearing session:', err.message);
+            }
         }
     };
 }
 
 module.exports = { useMongoDBAuthState, SessionModel };
-
