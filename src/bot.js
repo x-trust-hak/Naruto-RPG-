@@ -16,6 +16,8 @@ const connections = new Map();
 
 const activeExams = new Map(); // Tracks ongoing trivia questions for players
 
+const activeFights = new Map(); // Tracks ongoing live matches: playerJid -> fightState data object
+
 
 const BRAND = {
     dev: "Devtrust",
@@ -308,6 +310,177 @@ async function startBot(phoneNumber, socket) {
 
                 return await conn.sendMessage(from, { text: examIntro });
             }
+
+
+                        // Place this inside your conn.ev.on('messages.upsert') command handler logic in src/bot.js
+
+            // ==========================================
+            // PHASE 5: LIVE COMBAT COMMANDS INTERCEPTOR
+            // ==========================================
+            
+            // COMMAND: !fight @tag / !pvp @tag (Challenge initiation)
+            if (lowerText.startsWith('!fight') || lowerText.startsWith('!pvp')) {
+                const mentioned = m.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+                
+                if (!mentioned) {
+                    return await conn.sendMessage(from, { text: "❌ *TARGET MISSING* ❌\n\nYou must tag a valid ninja to challenge them to a duel!\n\n👉 *Usage:* \`!fight @player\`" });
+                }
+
+                if (mentioned === from) {
+                    return await conn.sendMessage(from, { text: "❌ You cannot hit yourself with a shadow clone technique. Tag a rival instead!" });
+                }
+
+                // Target state check
+                const rival = await User.findOne({ phoneId: mentioned, registrationStep: 'COMPLETED' });
+                if (!rival) {
+                    return await conn.sendMessage(from, { text: "❌ The targeted ninja has not registered their path yet using \`!start\`!" });
+                }
+
+                // Check if either player is already trapped in an active fight match
+                if (activeFights.has(from) || activeFights.has(mentioned)) {
+                    return await conn.sendMessage(from, { text: "❌ Battle arena occupied! One of you is currently engaged in a deathmatch." });
+                }
+
+                if (user.hp.current <= 50 || rival.hp.current <= 50) {
+                    return await conn.sendMessage(from, { text: "❌ Health bars too low! Both ninjas need at least 50 HP to start an official duel." });
+                }
+
+                // Initialize the combat session metadata inside the live tracking state container map
+                const fightInstance = {
+                    p1: { jid: from, name: user.username, clan: user.clan, maxHp: user.hp.max },
+                    p2: { jid: mentioned, name: rival.username, clan: rival.clan, maxHp: rival.hp.max },
+                    turn: from, // Challenger takes the first turn
+                    logs: []
+                };
+
+                activeFights.set(from, fightInstance);
+                activeFights.set(mentioned, fightInstance);
+
+                const challengeNotice = `⚔️ *SHINOBI DUEL CHALLENGE* ⚔️\n` +
+                    `----------------------------------------\n` +
+                    `🔴 *Challenger:* @${from.split('@')[0]} (${user.clan} Clan)\n` +
+                    `🔵 *Opponent:* @${mentioned.split('@')[0]} (${rival.clan} Clan)\n` +
+                    `----------------------------------------\n\n` +
+                    `💥 The match has officially begun!\n` +
+                    `👉 It is @${from.split('@')[0]}'s turn. \n\n` +
+                    `*AVAILABLE ACTION COMMANDS:*\n` +
+                    `🔹 Type \`!strike\` — Basic physical kunai attack (15-30 DMG, Costs 0 Chakra)\n` +
+                    `🔸 Type \`!jutsu\` — Cast your equipped Jutsu move (50-80 DMG, Costs 25 Chakra)`;
+
+                return await conn.sendMessage(from, { text: challengeNotice, mentions: [from, mentioned] });
+            }
+
+            // RUNTIME COMBAT ACTION EXECUTION INTERCEPTORS
+            if (activeFights.has(from)) {
+                const fight = activeFights.get(from);
+
+                // Quick safety check: Ensure it's actually this player's turn
+                if (fight.turn !== from) {
+                    return; // Silently ignore out-of-turn inputs so it doesn't spam the chat
+                }
+
+                const isP1Current = (from === fight.p1.jid);
+                const attacker = isP1Current ? fight.p1 : fight.p2;
+                const defender = isP1Current ? fight.p2 : fight.p1;
+
+                // Load database profile configurations dynamically for state operations
+                const attackerDb = isP1Current ? user : await User.findOne({ phoneId: defender.jid });
+                const defenderDb = isP1Current ? await User.findOne({ phoneId: defender.jid }) : user;
+
+                let damageDealt = 0;
+                let chakraCost = 0;
+                let usedAction = "";
+
+                // ACTION 1: Basic Physical Strike
+                if (lowerText === '!strike') {
+                    damageDealt = Math.floor(Math.random() * (30 - 15 + 1)) + 15;
+                    usedAction = "🗡️ launched a brutal physical Kunai dash";
+                }
+                // ACTION 2: Cast Equipped Jutsu
+                else if (lowerText === '!jutsu') {
+                    chakraCost = 25;
+                    if (attackerDb.chakra.current < chakraCost) {
+                        return await conn.sendMessage(from, { text: `❌ *CHAKRA DEPLETED!* You don't have enough chakra for a jutsu. Type \`!strike\` instead!` });
+                    }
+                    damageDealt = Math.floor(Math.random() * (80 - 50 + 1)) + 50;
+                    usedAction = `🔥 unleashed their signature *[${attackerDb.equippedJutsu[0] || "Basic Jutsu"}]*`;
+                } else {
+                    return; // Ignore non-combat text lines during active fights
+                }
+
+                // APPLY CLAN PASSIVE STRATEGIC MATRIX BUFFS
+                let battleFlavorText = "";
+                
+                // Attacker: Hyuga Clan 15% Critical Chance
+                if (attacker.clan === 'Hyuga' && Math.random() < 0.15) {
+                    damageDealt = Math.floor(damageDealt * 1.5);
+                    battleFlavorText += `🎯 *CRITICAL HIT!* Byakugan vision pierced through vital chakra pathways!\n`;
+                }
+
+                // Defender: Uchiha Clan 15% Evasion matrix adjustment
+                if (defender.clan === 'Uchiha' && Math.random() < 0.15) {
+                    damageDealt = 0;
+                    battleFlavorText += `🔴 *EVADE!* The opponent's Sharingan completely anticipated and dodged the movement!\n`;
+                }
+
+                // Deduct stats from database records
+                attackerDb.chakra.current = Math.max(0, attackerDb.chakra.current - chakraCost);
+                defenderDb.hp.current = Math.max(0, defenderDb.hp.current - damageDealt);
+
+                // Save both files safely down into MongoDB collections
+                await attackerDb.save();
+                await defenderDb.save();
+
+                // Switch turn pointers
+                fight.turn = defender.jid;
+
+                // Build action card text frame layout strings
+                let turnReport = `⚔️ *COMBAT ARENA INJURY REPORT* ⚔️\n` +
+                    `----------------------------------------\n` +
+                    `👤 *Attacker:* *${attacker.name}*\n` +
+                    `💥 *Action:* ${usedAction}\n\n` +
+                    `${battleFlavorText}` +
+                    `📉 *Damage Recorded:* ${damageDealt} DMG\n` +
+                    `----------------------------------------\n\n` +
+                    `📋 *HEALTH PROFILE TRACK:* \n` +
+                    `❤️ *${attacker.name}:* ${attackerDb.hp.current}/${attacker.maxHp} HP (⚡ ${attackerDb.chakra.current} Chakra)\n` +
+                    `❤️ *${defender.name}:* ${defenderDb.hp.current}/${defender.maxHp} HP\n\n`;
+
+                // CHECK FOR FINISHING KNOCKOUT CONDITION MET
+                if (defenderDb.hp.current <= 0) {
+                    // Clean out tracking maps pointers completely
+                    activeFights.delete(fight.p1.jid);
+                    activeFights.delete(fight.p2.jid);
+
+                    // Distribute cash balances rewards/penalties to profiles
+                    const bountyReward = 800;
+                    attackerDb.ryo += bountyReward;
+                    attackerDb.xp += 40;
+                    
+                    // Leave the loser at 1 HP so they are knocked out but don't lose their account
+                    defenderDb.hp.current = 1; 
+                    defenderDb.ryo = Math.max(0, defenderDb.ryo - 300);
+
+                    await attackerDb.save();
+                    await defenderDb.save();
+
+                    let matchOverCard = `🏆 *KO! DUEL FINISHED!* 🏆\n` +
+                        `----------------------------------------\n` +
+                        `🥇 *WINNER:* **${attacker.name}**\n` +
+                        `💀 *LOSER:* **${defender.name}**\n` +
+                        `----------------------------------------\n\n` +
+                        `✨ **${attacker.name}** completely dominated the battlefield and takes home the bounty!\n\n` +
+                        `💰 *Winner Loot:* +💰 800 Ryo & +40 XP\n` +
+                        `📉 *Loser Penalty:* -💰 300 Ryo (Dropped on the battlefield floor)`;
+
+                    return await conn.sendMessage(from, { text: matchOverCard });
+                }
+
+                // If match is still going, announce the next turn
+                turnReport += `👉 Next turn belongs to: @${defender.jid.split('@')[0]}! Respond with \`!strike\` or \`!jutsu\``;
+                return await conn.sendMessage(from, { text: turnReport, mentions: [defender.jid] });
+                    }
+                    
             
 
 
