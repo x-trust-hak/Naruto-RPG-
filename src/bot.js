@@ -146,7 +146,13 @@ async function startBot(phoneNumber, socket = null) {
             // 🔥 STEP 1: Event Reception Verification
             console.log("🔥 [STEP 1] UPSERT TRIGGERED. Type:", chatUpdate.type);
 
-            if (chatUpdate.type !== 'notify') return;
+          //  if (chatUpdate.type !== 'notify') return;
+            // ✅ NEW MULTI-TYPE PIPE FIX:
+           if (chatUpdate.type !== 'notify' && chatUpdate.type !== 'append') {
+               console.log(`⚠️ Skipping unhandled event update type: ${chatUpdate.type}`);
+               return;
+            }
+
             
             const m = chatUpdate.messages[0];
             if (!m || !m.message) {
