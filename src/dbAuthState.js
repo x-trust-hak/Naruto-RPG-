@@ -10,7 +10,9 @@ const AuthSessionSchema = new mongoose.Schema({
     value: { type: String, required: true }
 });
 AuthSessionSchema.index({ sessionId: 1, key: 1 }, { unique: true });
-const SessionModel = mongoose.model('AuthSession', AuthSessionSchema);
+
+// Check if model already exists to prevent OverwriteModelError during hot-reloads
+const SessionModel = mongoose.models.AuthSession || mongoose.model('AuthSession', AuthSessionSchema);
 
 async function useMongoDBAuthState(sessionId) {
     const writeData = async (data, key) => {
@@ -45,12 +47,14 @@ async function useMongoDBAuthState(sessionId) {
         }
     };
 
-    // 1. Fetch or initialize the root structural baseline execution credentials block
+    // 1. Fetch existing credentials from DB
     let creds = await readData('creds');
+    
+    // 2. FIXED: If they don't exist, initialize them purely in memory.
+    // DO NOT write them to MongoDB yet!
     if (!creds) {
         const { initAuthCreds } = require('@whiskeysockets/baileys');
         creds = initAuthCreds();
-        await writeData(creds, 'creds');
     }
 
     return {
@@ -77,6 +81,7 @@ async function useMongoDBAuthState(sessionId) {
                             if (value === null) {
                                 await removeData(`${type}-${id}`);
                             } else {
+                                // This will be safely intercepted by the write guard in your updated bot.js
                                 await writeData(value, `${type}-${id}`);
                             }
                         }
@@ -91,3 +96,4 @@ async function useMongoDBAuthState(sessionId) {
 }
 
 module.exports = { useMongoDBAuthState, SessionModel };
+
