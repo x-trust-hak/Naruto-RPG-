@@ -162,6 +162,56 @@ async function startBot(phoneNumber, socket) {
                 }
                 return;
             }
+                        // Place this inside your conn.ev.on('messages.upsert') command handler logic in src/bot.js
+
+            // COMMAND: !train (Chakra Depletion & Experience Gain Demonstration)
+            if (lowerText === '!train') {
+                const CHAKRA_COST = 30;
+                const XP_GAIN = 15;
+
+                // Guard Check: Does the user have enough chakra?
+                if (user.chakra.current < CHAKRA_COST) {
+                    const lowChakraMsg = `❌ *CHAKRA DEPLETED* ❌\n\n` +
+                        `Your physical stamina is completely exhausted, Ninja *${user.username}*!\n\n` +
+                        `⚡ *Current Chakra:* ${user.chakra.current} / ${user.chakra.max}\n` +
+                        `⚠️ *Required:* ${CHAKRA_COST} Chakra\n\n` +
+                        `⏳ _Sit tight or eat a Food Pill from the \`!shop\`! Your chakra naturally regenerates by +10 every single minute._`;
+                    return await conn.sendMessage(from, { text: lowChakraMsg });
+                }
+
+                // Deduct stats and award experience points
+                user.chakra.current -= CHAKRA_COST;
+                user.xp += XP_GAIN;
+
+                // Level up processing calculation logic
+                let leveledUp = false;
+                const xpNeededForNextLevel = user.level * 100;
+                if (user.xp >= xpNeededForNextLevel) {
+                    user.xp -= xpNeededForNextLevel;
+                    user.level += 1;
+                    user.chakra.max += 15;
+                    user.hp.max += 50;
+                    user.chakra.current = user.chakra.max; // Full heal upon achieving level milestone
+                    user.hp.current = user.hp.max;
+                    leveledUp = true;
+                }
+
+                await user.save();
+
+                let trainingResultText = `🏋️‍♂️ *SHINOBI ACADEMY TRAINING* 🏋️‍♂️\n\n` +
+                    `You spent hours focusing your physical energy and practicing hand signs!\n\n` +
+                    `📉 *Chakra Spent:* -${CHAKRA_COST} (Remaining: ${user.chakra.current}/${user.chakra.max})\n` +
+                    `📈 *Experience Earned:* +${XP_GAIN} XP (${user.xp}/${user.level * 100})\n`;
+
+                if (leveledUp) {
+                    trainingResultText += `\n🎉 *LEVEL UP!* 🎉\n` +
+                        `Congratulations! You climbed to *Level ${user.level}*!\n` +
+                        `💪 Your Max Health points increased to ${user.hp.max} and Max Chakra expanded to ${user.chakra.max}!`;
+                }
+
+                return await conn.sendMessage(from, { text: trainingResultText });
+            }
+            
 
             // COMMAND: !profile (Upgraded with Village Landscape Card)
             if (lowerText === '!profile') {
