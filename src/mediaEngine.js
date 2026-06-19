@@ -1,28 +1,93 @@
 // src/mediaEngine.js
-const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const fs = require('fs');
+const path = require('path');
 
-// High-quality static graphic URLs representing the villages and banners
-const GRAPHICS = {
-    WELCOME_BANNER: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&q=80", // Premium Anime Stylized Banner
-    VILLAGE_LEAF: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&q=80",
-    VILLAGE_SAND: "https://images.unsplash.com/photo-1547234935-80c7145ec969?w=600&q=80",
-    VILLAGE_MIST: "https://images.unsplash.com/photo-1518156677180-95a2893f3e9f?w=600&q=80",
-    VILLAGE_CLOUD: "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=600&q=80",
-    VILLAGE_STONE: "https://images.unsplash.com/photo-1504198453319-5ce911bafcde?w=600&q=80",
-    SHOP_BANNER: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&q=80"
-};
+const IMAGES_DIR = path.join(__dirname, '../images');
 
 /**
- * Safely fetches an image from an external URL and wraps it into a clean Baileys message config.
- * @param {string} url - Target asset link
- * @param {string} caption - Accompanying textual scroll info
+ * Load image as buffer from local file
  */
-function prepareImagePayload(url, caption) {
+function loadImage(name) {
+    try {
+        const filePath = path.join(IMAGES_DIR, `${name}.jpg`);
+        if (fs.existsSync(filePath)) {
+            return fs.readFileSync(filePath);
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Prepare image message payload for Baileys
+ * Falls back to text-only if image not found
+ */
+function prepareImagePayload(imageName, caption) {
+    const buffer = loadImage(imageName);
+    if (!buffer) {
+        return { text: caption };
+    }
     return {
-        image: { url: url },
-        caption: caption,
-        mimetype: "image/jpeg"
+        image: buffer,
+        caption,
+        mimetype: 'image/jpeg'
     };
 }
 
-module.exports = { GRAPHICS, prepareImagePayload };
+// Character image mapping
+// Each character can have multiple images for different moods/situations
+const CHARACTER_IMAGES = {
+    naruto:     ['naruto', 'naruto2'],
+    sasuke:     ['welcome'],     // placeholder until you send Sasuke image
+    sakura:     ['welcome'],
+    kakashi:    ['welcome'],
+    itachi:     ['akatsuki'],
+    gaara:      ['gaara4', 'gaara3', 'gaara5'],
+    obito:      ['obito', 'obito_kid'],
+    minato:     ['welcome'],
+    pain:       ['akatsuki'],
+    kisame:     ['akatsuki'],
+    zabuza:     ['welcome'],
+    killer_bee: ['welcome'],
+    deidara:    ['akatsuki'],
+    sasori:     ['akatsuki'],
+    neji:       ['welcome'],
+    rock_lee:   ['welcome'],
+    jiraiya:    ['welcome'],
+    tsunade:    ['welcome'],
+    konan:      ['akatsuki'],
+    raikage:    ['welcome'],
+};
+
+// Get main profile image for a character
+function getCharacterImage(characterId) {
+    const images = CHARACTER_IMAGES[characterId];
+    if (!images || images.length === 0) return 'welcome';
+    return images[0];
+}
+
+// Get battle image for a character (more intense)
+function getBattleImage(characterId) {
+    const images = CHARACTER_IMAGES[characterId];
+    if (!images || images.length === 0) return 'welcome';
+    return images[images.length - 1]; // last image tends to be most intense
+}
+
+// Village banner images
+const VILLAGE_IMAGES = {
+    Leaf:  'welcome',
+    Sand:  'gaara3',
+    Mist:  'welcome',
+    Cloud: 'welcome',
+    Stone: 'welcome',
+    Rain:  'akatsuki',
+};
+
+module.exports = {
+    prepareImagePayload,
+    getCharacterImage,
+    getBattleImage,
+    VILLAGE_IMAGES,
+    loadImage
+};
