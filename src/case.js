@@ -4,8 +4,8 @@ const User = require('../models/User');
 const { prepareImagePayload, getCharacterImage, getBattleImage, VILLAGE_IMAGES } = require('./mediaEngine');
 const { CHARACTERS, FREE_CHARACTERS, xpForLevel, getCharacter } = require('./characters');
 
-const ADMIN_NUMBER = '2349155604141@s.whatsapp.net';
-const ADMIN_PLAIN  = '2349155604141';
+const ADMIN_NUMBER = '2347041560392@s.whatsapp.net';
+const ADMIN_PLAIN  = '2347041560392';
 
 const BRAND = {
     billingSupportNumber: "2347041560392",
